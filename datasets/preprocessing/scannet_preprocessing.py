@@ -5,6 +5,13 @@ import pandas as pd
 from fire import Fire
 from natsort import natsorted
 from loguru import logger
+import os, sys
+current = os.path.dirname(os.path.realpath(__file__))
+
+parent = os.path.dirname(current)
+print(parent)
+parent = os.path.dirname(parent)
+sys.path.append(parent)
 
 from datasets.preprocessing.base_preprocessing import BasePreprocessing
 from utils.point_cloud_utils import load_ply_with_normals
@@ -15,7 +22,7 @@ from datasets.scannet200.scannet200_constants import VALID_CLASS_IDS_200, SCANNE
 class ScannetPreprocessing(BasePreprocessing):
     def __init__(
             self,
-            data_dir: str = "./data/raw/scannet/scannet",
+            data_dir: str = "./data/raw/scannet/",
             save_dir: str = "./data/processed/scannet",
             modes: tuple = ("train", "validation", "test"),
             n_jobs: int = -1,

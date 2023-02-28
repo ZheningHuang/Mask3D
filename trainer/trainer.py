@@ -382,17 +382,17 @@ class InstanceSegmentation(pl.LightningModule):
             if self.config.trainer.deterministic:
                 torch.use_deterministic_algorithms(True)
 
-        if self.config.general.save_visualizations:
-            backbone_features = output['backbone_features'].F.detach().cpu().numpy()
-            from sklearn import decomposition
-            pca = decomposition.PCA(n_components=3)
-            pca.fit(backbone_features)
-            pca_features = pca.transform(backbone_features)
-            rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
+        # if self.config.general.save_visualizations:
+        #     backbone_features = output['backbone_features'].F.detach().cpu().numpy()
+        #     from sklearn import decomposition
+        #     pca = decomposition.PCA(n_components=3)
+        #     pca.fit(backbone_features)
+        #     pca_features = pca.transform(backbone_features)
+        #     rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
 
         self.eval_instance_step(output, target, target_full, inverse_maps, file_names, original_coordinates,
                                 original_colors, original_normals, raw_coordinates, data_idx,
-                                backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
+                                backbone_features=None if self.config.general.save_visualizations else None)
 
         if self.config.data.test_mode != "test":
             return {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
@@ -573,6 +573,21 @@ class InstanceSegmentation(pl.LightningModule):
                 all_pred_masks.append(sorted_masks)
                 all_pred_scores.append(sort_scores_values)
                 all_heatmaps.append(sorted_heatmap)
+
+            # start to save each proposal
+            raw_point = full_res_coords[0]
+            raw_color = original_colors[0]
+            raw_point_color = np.hstack((raw_point, raw_color))
+            pred_masks = all_pred_masks[0]
+            mask_proposals = []
+            for i in range(pred_masks.shape[1]):
+                indices = np.nonzero(pred_masks[:, i])[0]
+                mask_points = raw_point_color[indices]
+                mask_proposals.append(mask_points)           
+            for i, point_cloud in enumerate(mask_proposals):
+                xyz = point_cloud[:, :3]
+                rgb = point_cloud[:, 3:]
+
 
         if self.validation_dataset.dataset_name == "scannet200":
             all_pred_classes[bid][all_pred_classes[bid] == 0] = -1
