@@ -580,7 +580,7 @@ class SemanticSegmentationDataset(Dataset):
             number_of_all_labels += 1
             if v["validation"]:
                 number_of_validation_labels += 1
-
+        # print("num_labels", num_labels, "number_of_all_labels", number_of_all_labels)
         if num_labels == number_of_all_labels:
             return labels
         elif num_labels == number_of_validation_labels:

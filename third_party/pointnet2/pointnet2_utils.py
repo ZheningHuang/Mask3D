@@ -20,11 +20,11 @@ except:
     import __builtin__ as builtins
 
 try:
-    import pointnet2._ext as _ext
+    import pointnet2
 except ImportError:
     if not getattr(builtins, "__POINTNET2_SETUP__", False):
         raise ImportError(
-            "Could not import _ext module.\n"
+            "Could not import pointnet2 module.\n"
             "Please see the setup instructions in the README: "
             "https://github.com/erikwijmans/Pointnet2_PyTorch/blob/master/README.rst"
         )
@@ -47,31 +47,34 @@ class RandomDropout(nn.Module):
 
 class FurthestPointSampling(Function):
     @staticmethod
-    def forward(ctx, xyz, npoint):
-        # type: (Any, torch.Tensor, int) -> torch.Tensor
-        r"""
+    def forward(ctx, xyz: torch.Tensor, npoint: int) -> torch.Tensor:
+        """
         Uses iterative furthest point sampling to select a set of npoint features that have the largest
         minimum distance
-
-        Parameters
-        ----------
-        xyz : torch.Tensor
-            (B, N, 3) tensor where N > npoint
-        npoint : int32
-            number of features in the sampled set
-
-        Returns
-        -------
-        torch.Tensor
-            (B, npoint) tensor containing the set
+        :param ctx:
+        :param xyz: (B, N, 3) where N > npoint
+        :param npoint: int, number of features in the sampled set
+        :return:
+             output: (B, npoint) tensor containing the set (idx)
         """
-        fps_inds = _ext.furthest_point_sampling(xyz, npoint)
-        ctx.mark_non_differentiable(fps_inds)
-        return fps_inds
+        assert xyz.is_contiguous()
+
+        B, N, _ = xyz.size()
+        # output = torch.cuda.IntTensor(B, npoint, device=xyz.device)
+        # temp = torch.cuda.FloatTensor(B, N, device=xyz.device).fill_(1e10)
+        output = torch.cuda.IntTensor(B, npoint)
+        temp = torch.cuda.FloatTensor(B, N).fill_(1e10)
+
+        pointnet2.furthest_point_sampling_wrapper(
+            B, N, npoint, xyz, temp, output)
+        return output
 
     @staticmethod
     def backward(xyz, a=None):
         return None, None
+
+
+furthest_point_sample = FurthestPointSampling.apply
 
 
 furthest_point_sample = FurthestPointSampling.apply
@@ -101,13 +104,13 @@ class GatherOperation(Function):
 
         ctx.for_backwards = (idx, C, N)
 
-        return _ext.gather_points(features, idx)
+        return pointnet2.gather_points(features, idx)
 
     @staticmethod
     def backward(ctx, grad_out):
         idx, C, N = ctx.for_backwards
 
-        grad_features = _ext.gather_points_grad(grad_out.contiguous(), idx, N)
+        grad_features = pointnet2.gather_points_grad(grad_out.contiguous(), idx, N)
         return grad_features, None
 
 
@@ -134,7 +137,7 @@ class ThreeNN(Function):
         idx : torch.Tensor
             (B, n, 3) index of 3 nearest neighbors
         """
-        dist2, idx = _ext.three_nn(unknown, known)
+        dist2, idx = pointnet2.three_nn(unknown, known)
 
         return torch.sqrt(dist2), idx
 
@@ -171,7 +174,7 @@ class ThreeInterpolate(Function):
 
         ctx.three_interpolate_for_backward = (idx, weight, m)
 
-        return _ext.three_interpolate(features, idx, weight)
+        return pointnet2.three_interpolate(features, idx, weight)
 
     @staticmethod
     def backward(ctx, grad_out):
@@ -193,7 +196,7 @@ class ThreeInterpolate(Function):
         """
         idx, weight, m = ctx.three_interpolate_for_backward
 
-        grad_features = _ext.three_interpolate_grad(
+        grad_features = pointnet2.three_interpolate_grad(
             grad_out.contiguous(), idx, weight, m
         )
 
@@ -226,7 +229,7 @@ class GroupingOperation(Function):
 
         ctx.for_backwards = (idx, N)
 
-        return _ext.group_points(features, idx)
+        return pointnet2.group_points(features, idx)
 
     @staticmethod
     def backward(ctx, grad_out):
@@ -246,7 +249,7 @@ class GroupingOperation(Function):
         """
         idx, N = ctx.for_backwards
 
-        grad_features = _ext.group_points_grad(grad_out.contiguous(), idx, N)
+        grad_features = pointnet2.group_points_grad(grad_out.contiguous(), idx, N)
 
         return grad_features, None
 
@@ -276,7 +279,7 @@ class BallQuery(Function):
         torch.Tensor
             (B, npoint, nsample) tensor with the indicies of the features that form the query balls
         """
-        inds = _ext.ball_query(new_xyz, xyz, radius, nsample)
+        inds = pointnet2.ball_query(new_xyz, xyz, radius, nsample)
         ctx.mark_non_differentiable(inds)
         return inds
 
