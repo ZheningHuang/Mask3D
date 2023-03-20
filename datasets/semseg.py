@@ -211,7 +211,7 @@ class SemanticSegmentationDataset(Dataset):
         elif len(color_mean_std[0]) == 3 and len(color_mean_std[1]) == 3:
             color_mean, color_std = color_mean_std[0], color_mean_std[1]
         else:
-            logger.error("pass mean and std as tuple of tuples, or as an .yaml file")
+            color_mean, color_std = (0.5, 0.5, 0.5), (1, 1, 1)
 
         # augmentations
         self.volume_augmentations = V.NoOp()

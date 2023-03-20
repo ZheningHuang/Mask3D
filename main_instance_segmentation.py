@@ -41,12 +41,12 @@ def get_parameters(cfg: DictConfig):
         print("EXPERIMENT ALREADY EXIST")
         cfg['trainer']['resume_from_checkpoint'] = f"{cfg.general.save_dir}/last-epoch.ckpt"
 
-    for log in cfg.logging:
-        print(log)
-        loggers.append(hydra.utils.instantiate(log))
-        loggers[-1].log_hyperparams(
-            flatten_dict(OmegaConf.to_container(cfg, resolve=True))
-        )
+    # for log in cfg.logging:
+    #     print(log)
+    #     loggers.append(hydra.utils.instantiate(log))
+    #     loggers[-1].log_hyperparams(
+    #         flatten_dict(OmegaConf.to_container(cfg, resolve=True))
+    #     )
 
     model = InstanceSegmentation(cfg)
     if cfg.general.backbone_checkpoint is not None:
@@ -76,7 +76,6 @@ def train(cfg: DictConfig):
         **cfg.trainer,
     )
     runner.fit(model)
-
 
 @hydra.main(config_path="conf", config_name="config_base_instance_segmentation.yaml")
 def test(cfg: DictConfig):

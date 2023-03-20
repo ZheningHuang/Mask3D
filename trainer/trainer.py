@@ -863,6 +863,11 @@ class InstanceSegmentation(pl.LightningModule):
         scheduler_config.update(self.config.scheduler.pytorch_lightning_params)
         return [optimizer], [scheduler_config]
 
+    def lr_scheduler_step(self, scheduler, optimizer_idx, metric):
+        scheduler.step(
+            epoch=self.current_epoch
+        )  # note to change argument from metric to metrics when using pytorch official schedulers.
+
     def prepare_data(self):
         self.train_dataset = hydra.utils.instantiate(self.config.data.train_dataset)
         self.validation_dataset = hydra.utils.instantiate(

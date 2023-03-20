@@ -8,7 +8,7 @@
 .vscode/
 
 
-
+scannet_val.ckpt
 
 
 # Byte-compiled / optimized / DLL files
