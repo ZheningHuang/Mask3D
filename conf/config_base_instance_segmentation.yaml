@@ -2,22 +2,22 @@ general:
   train_mode: true
   task: "instance_segmentation"
   seed: null
-  checkpoint: "scannet_val.ckpt"
+  checkpoint: null
   backbone_checkpoint: null
   freeze_backbone: false # train only last layer
   linear_probing_backbone: false
   train_on_segments: false
   eval_on_segments: false
   filter_out_instances: false
-  save_visualizations: false
+  save_visualizations: True
   visualization_point_size: 20
   decoder_id: -1
   export: false
   use_dbscan: false
   ignore_class_threshold: 100
-  project_name: scannet
-  workspace: jonasschult
-  experiment_name: DEBUG_ABLATION
+  project_name: scannet_nolabel
+  workspace: scannet_nolabel
+  experiment_name: scannet_nolabel
   num_targets: 19
   add_instance: true
   dbscan_eps: 0.95

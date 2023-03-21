@@ -102,16 +102,19 @@ class HungarianMatcher(nn.Module):
         # Iterate through batch size
         for b in range(bs):
 
-            out_prob = outputs["pred_logits"][b].softmax(-1)  # [num_queries, num_classes]
-            tgt_ids = targets[b]["labels"].clone()
+            # out_prob = outputs["pred_logits"][b].softmax(-1)  # [num_queries, num_classes]
+            # tgt_ids = targets[b]["labels"].clone()
 
+            # print("------ here we start to exam matcher------------")
+            # print(out_prob.shape, tgt_ids)
             # Compute the classification cost. Contrary to the loss, we don't use the NLL,
             # but approximate it in 1 - proba[target class].
             # The 1 is a constant that doesn't change the matching, it can be ommitted.
-            filter_ignore = (tgt_ids == 253)
-            tgt_ids[filter_ignore] = 0
-            cost_class = -out_prob[:, tgt_ids]
-            cost_class[:, filter_ignore] = -1.  # for ignore classes pretend perfect match ;) TODO better worst class match?
+
+            # filter_ignore = (tgt_ids == 253)
+            # tgt_ids[filter_ignore] = 0
+            # cost_class = -out_prob[:, tgt_ids]
+            # cost_class[:, filter_ignore] = -1.  # for ignore classes pretend perfect match ;) TODO better worst class match?
 
             out_mask = outputs['pred_masks'][b].T  # [num_queries, H_pred, W_pred]
             # gt masks are already padded when preparing target
@@ -147,18 +150,15 @@ class HungarianMatcher(nn.Module):
                 tgt_mask = tgt_mask.float()
                 # Compute the focal loss between masks
                 cost_mask = batch_sigmoid_ce_loss_jit(out_mask[:, point_idx], tgt_mask[:, point_idx])
-
                 # Compute the dice loss betwen masks
                 cost_dice = batch_dice_loss_jit(out_mask[:, point_idx], tgt_mask[:, point_idx])
             
             # Final cost matrix
             C = (
                 self.cost_mask * cost_mask
-                + self.cost_class * cost_class
                 + self.cost_dice * cost_dice
             )
             C = C.reshape(num_queries, -1).cpu()
-
             indices.append(linear_sum_assignment(C))
 
         return [

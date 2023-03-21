@@ -63,7 +63,8 @@ class InstanceSegmentation(pl.LightningModule):
         self.ignore_label = config.data.ignore_label
 
         matcher = hydra.utils.instantiate(config.matcher)
-        weight_dict = {"loss_ce": matcher.cost_class,
+        weight_dict = {
+                        # "loss_ce": matcher.cost_class,
                        "loss_mask": matcher.cost_mask,
                        "loss_dice": matcher.cost_dice}
 
@@ -145,7 +146,7 @@ class InstanceSegmentation(pl.LightningModule):
 
         logs = {f"train_{k}": v.detach().cpu().item() for k,v in losses.items()}
 
-        logs['train_mean_loss_ce'] = statistics.mean([item for item in [v for k, v in logs.items() if "loss_ce" in k]])
+        # logs['train_mean_loss_ce'] = statistics.mean([item for item in [v for k, v in logs.items() if "loss_ce" in k]])
 
         logs['train_mean_loss_mask'] = statistics.mean(
             [item for item in [v for k, v in logs.items() if "loss_mask" in k]])
@@ -416,6 +417,7 @@ class InstanceSegmentation(pl.LightningModule):
     def get_mask_and_scores(self, mask_cls, mask_pred, num_queries=100, num_classes=18, device=None):
         if device is None:
             device = self.device
+
         labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
 
         if self.config.general.topk_per_image != -1 :
@@ -424,14 +426,13 @@ class InstanceSegmentation(pl.LightningModule):
             scores_per_query, topk_indices = mask_cls.flatten(0, 1).topk(num_queries, sorted=True)
 
         labels_per_query = labels[topk_indices]
-        topk_indices = topk_indices // num_classes
-        mask_pred = mask_pred[:, topk_indices]
-
         result_pred_mask = (mask_pred > 0).float()
         heatmap = mask_pred.float().sigmoid()
 
         mask_scores_per_image = (heatmap * result_pred_mask).sum(0) / (result_pred_mask.sum(0) + 1e-6)
-        score = scores_per_query * mask_scores_per_image
+
+        score = mask_scores_per_image
+
         classes = labels_per_query
 
         return score, result_pred_mask, classes, heatmap
@@ -841,8 +842,6 @@ class InstanceSegmentation(pl.LightningModule):
                 dd[key].append(val)
 
         dd = {k: statistics.mean(v) for k, v in dd.items()}
-
-        dd['val_mean_loss_ce'] = statistics.mean([item for item in [v for k,v in dd.items() if "loss_ce" in k]])
         dd['val_mean_loss_mask'] = statistics.mean([item for item in [v for k,v in dd.items() if "loss_mask" in k]])
         dd['val_mean_loss_dice'] = statistics.mean([item for item in [v for k,v in dd.items() if "loss_dice" in k]])
 

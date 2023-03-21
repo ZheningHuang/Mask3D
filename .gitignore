@@ -16,6 +16,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+DEBUG_ABLATION
 # C extensions
 *.so
 
