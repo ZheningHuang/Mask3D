@@ -13,7 +13,7 @@ from collections import defaultdict
 from sklearn.cluster import DBSCAN
 from utils.votenet_utils.eval_det import eval_det
 from datasets.scannet200.scannet200_splits import HEAD_CATS_SCANNET_200, TAIL_CATS_SCANNET_200, COMMON_CATS_SCANNET_200, VALID_CLASS_IDS_200_VALIDATION
-
+from utils.mask2img import mask2images
 import hydra
 import MinkowskiEngine as ME
 import numpy as np
@@ -319,6 +319,7 @@ class InstanceSegmentation(pl.LightningModule):
 
     def eval_step(self, batch, batch_idx):
         data, target, file_names = batch
+        print("file_names", file_names)
         inverse_maps = data.inverse_maps
         target_full = data.target_full
         original_colors = data.original_colors
@@ -587,7 +588,8 @@ class InstanceSegmentation(pl.LightningModule):
             for i, point_cloud in enumerate(mask_proposals):
                 xyz = point_cloud[:, :3]
                 rgb = point_cloud[:, 3:]
-
+            
+            mask2images(mask_proposals, raw_point_color, [0,-30,30,-60,60], Resize = 1.5, background = False, save_image = True, name = file_names)
 
         if self.validation_dataset.dataset_name == "scannet200":
             all_pred_classes[bid][all_pred_classes[bid] == 0] = -1

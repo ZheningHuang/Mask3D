@@ -2,8 +2,8 @@
 export OMP_NUM_THREADS=3  # speeds up MinkowskiEngine
 
 CURR_DBSCAN=0.95
-CURR_TOPK=500
-CURR_QUERY=150
+CURR_TOPK=100
+CURR_QUERY=100
 
 # TRAIN
 # python main_instance_segmentation.py \

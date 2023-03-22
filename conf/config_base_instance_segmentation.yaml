@@ -16,8 +16,8 @@ general:
   use_dbscan: false
   ignore_class_threshold: 100
   project_name: scannet
-  workspace: jonasschult
-  experiment_name: DEBUG_ABLATION
+  workspace: zhening
+  experiment_name: no_cls
   num_targets: 19
   add_instance: true
   dbscan_eps: 0.95
