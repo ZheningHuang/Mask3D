@@ -7,6 +7,7 @@
 
 .vscode/
 
+DEBUG_ABLATION
 
 scannet_val.ckpt
 

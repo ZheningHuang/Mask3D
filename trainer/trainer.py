@@ -13,7 +13,7 @@ from collections import defaultdict
 from sklearn.cluster import DBSCAN
 from utils.votenet_utils.eval_det import eval_det
 from datasets.scannet200.scannet200_splits import HEAD_CATS_SCANNET_200, TAIL_CATS_SCANNET_200, COMMON_CATS_SCANNET_200, VALID_CLASS_IDS_200_VALIDATION
-
+# from utils.mask2img import mask2images
 import hydra
 import MinkowskiEngine as ME
 import numpy as np
@@ -24,7 +24,7 @@ import random
 import colorsys
 from typing import List, Tuple
 import functools
-
+from plyfile import PlyData, PlyElement
 
 @functools.lru_cache(20)
 def get_evenly_distributed_colors(count: int) -> List[Tuple[np.uint8, np.uint8, np.uint8]]:
@@ -319,6 +319,7 @@ class InstanceSegmentation(pl.LightningModule):
 
     def eval_step(self, batch, batch_idx):
         data, target, file_names = batch
+        print("file_names", file_names)
         inverse_maps = data.inverse_maps
         target_full = data.target_full
         original_colors = data.original_colors
@@ -574,6 +575,43 @@ class InstanceSegmentation(pl.LightningModule):
                 all_pred_scores.append(sort_scores_values)
                 all_heatmaps.append(sorted_heatmap)
 
+            # start to save each proposal
+            raw_point = full_res_coords[0]
+            raw_color = original_colors[0]
+            raw_point_color = np.hstack((raw_point, raw_color))
+            pred_masks = all_pred_masks[0]
+            mask_proposals = []
+            for i in range(pred_masks.shape[1]):
+                indices = np.nonzero(pred_masks[:, i])[0]
+                mask_points = raw_point_color[indices]
+                mask_proposals.append(mask_points)     
+
+            np.save('{}_mask_proposals_list.npy'.format(file_names), np.array(mask_proposals, dtype=object), allow_pickle=True)
+            np.save('{}_pointcloud_array.npy'.format(file_names), raw_point_color)
+
+            print("saved mask proposal!!!!")
+            print("len of mask proposal", len(mask_proposals))
+
+            for i, point_cloud in enumerate(mask_proposals):
+                xyz = point_cloud[:, :3]
+                rgb = point_cloud[:, 3:]
+                # save the PlyData object to a file with a unique name based on the point cloud's position in the list
+                filename = f"pointcloud_mask/point_cloud_{i}.ply"
+                self.writeply(filename, xyz, rgb)
+                print(f"Mask proposal {i+1} has shape: {mask_proposals[i].shape}")
+
+
+            # lets save the mask proposal
+
+
+            # for i, point_cloud in enumerate(mask_proposals):
+            #     xyz = point_cloud[:, :3]
+            #     rgb = point_cloud[:, 3:]
+            
+            # mask2images(mask_proposals, raw_point_color, [0,-30,30,-60,60], Resize = 1.5, background = False, save_image = True, name = file_names)
+
+
+        
         if self.validation_dataset.dataset_name == "scannet200":
             all_pred_classes[bid][all_pred_classes[bid] == 0] = -1
             if self.config.data.test_mode != "test":
@@ -681,6 +719,18 @@ class InstanceSegmentation(pl.LightningModule):
                         file_names[bid],
                         self.decoder_id
                     )
+
+    def writeply(self,filename, xyz, rgb):
+        """write into a ply file"""
+        prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+        vertex_all = np.empty(len(xyz), dtype=prop)
+        for i_prop in range(0, 3):
+            vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
+        for i_prop in range(0, 3):
+            vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
+        ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+        ply.write(filename)
+
 
     def eval_instance_epoch_end(self):
         log_prefix = f"val"

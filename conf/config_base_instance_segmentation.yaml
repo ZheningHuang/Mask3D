@@ -9,15 +9,15 @@ general:
   train_on_segments: false
   eval_on_segments: false
   filter_out_instances: false
-  save_visualizations: false
-  visualization_point_size: 20
+  save_visualizations: True
+  visualization_point_size: 10
   decoder_id: -1
   export: false
   use_dbscan: false
   ignore_class_threshold: 100
-  project_name: scannet
-  workspace: jonasschult
-  experiment_name: DEBUG_ABLATION
+  project_name: get_masks
+  workspace: zh340
+  experiment_name: get_masks
   num_targets: 19
   add_instance: true
   dbscan_eps: 0.95
