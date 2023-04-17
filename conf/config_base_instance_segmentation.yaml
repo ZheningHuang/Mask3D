@@ -2,7 +2,7 @@ general:
   train_mode: true
   task: "instance_segmentation"
   seed: null
-  checkpoint: null
+  checkpoint: "scannet_val.ckpt"
   backbone_checkpoint: null
   freeze_backbone: false # train only last layer
   linear_probing_backbone: false
@@ -17,7 +17,7 @@ general:
   ignore_class_threshold: 100
   project_name: scannet_nolabel
   workspace: scannet_nolabel
-  experiment_name: scannet_nolabel
+  experiment_name: scan_val
   num_targets: 19
   add_instance: true
   dbscan_eps: 0.95

@@ -9,8 +9,9 @@
 
 
 scannet_val.ckpt
+*.jpg
 
-
+*.ckpt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
