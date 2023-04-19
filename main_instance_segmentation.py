@@ -77,7 +77,6 @@ def train(cfg: DictConfig):
     )
     runner.fit(model)
 
-
 @hydra.main(config_path="conf", config_name="config_base_instance_segmentation.yaml")
 def test(cfg: DictConfig):
     # because hydra wants to change dir for some reason

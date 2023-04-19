@@ -6,17 +6,17 @@ CURR_TOPK=300
 CURR_QUERY=150
 
 # TRAIN
-python main_instance_segmentation.py \
-general.experiment_name="benchmark" \
-general.eval_on_segments=true \
-general.train_on_segments=true \
-data.train_mode=train_validation
+# python main_instance_segmentation.py \
+# general.experiment_name="benchmark" \
+# general.eval_on_segments=true \
+# general.train_on_segments=true \
+# data.train_mode=train_validation
 
 # TEST
 python main_instance_segmentation.py \
 general.experiment_name="benchmark_query_${CURR_QUERY}_topk_${CURR_TOPK}_dbscan_${CURR_DBSCAN}" \
 general.project_name="scannet_eval" \
-general.checkpoint='checkpoints/scannet/scannet_benchmark.ckpt' \
+general.checkpoint='saved/scannet_nolabel/last-epoch.ckpt' \
 general.eval_on_segments=true \
 general.train_on_segments=true \
 general.train_mode=false \

@@ -3,7 +3,6 @@ _target_: models.criterion.SetCriterion
 num_classes: ${general.num_targets}
 eos_coef: 0.1
 losses:
-  - "labels"
   - "masks"
 num_points: ${matcher.num_points}
 oversample_ratio: 3.0

@@ -13,7 +13,8 @@ from collections import defaultdict
 from sklearn.cluster import DBSCAN
 from utils.votenet_utils.eval_det import eval_det
 from datasets.scannet200.scannet200_splits import HEAD_CATS_SCANNET_200, TAIL_CATS_SCANNET_200, COMMON_CATS_SCANNET_200, VALID_CLASS_IDS_200_VALIDATION
-from utils.mask2img import mask2images
+from plyfile import PlyData, PlyElement
+
 import hydra
 import MinkowskiEngine as ME
 import numpy as np
@@ -63,7 +64,8 @@ class InstanceSegmentation(pl.LightningModule):
         self.ignore_label = config.data.ignore_label
 
         matcher = hydra.utils.instantiate(config.matcher)
-        weight_dict = {"loss_ce": matcher.cost_class,
+        weight_dict = {
+                        # "loss_ce": matcher.cost_class,
                        "loss_mask": matcher.cost_mask,
                        "loss_dice": matcher.cost_dice}
 
@@ -145,7 +147,7 @@ class InstanceSegmentation(pl.LightningModule):
 
         logs = {f"train_{k}": v.detach().cpu().item() for k,v in losses.items()}
 
-        logs['train_mean_loss_ce'] = statistics.mean([item for item in [v for k, v in logs.items() if "loss_ce" in k]])
+        # logs['train_mean_loss_ce'] = statistics.mean([item for item in [v for k, v in logs.items() if "loss_ce" in k]])
 
         logs['train_mean_loss_mask'] = statistics.mean(
             [item for item in [v for k, v in logs.items() if "loss_mask" in k]])
@@ -205,8 +207,8 @@ class InstanceSegmentation(pl.LightningModule):
             instances_colors = torch.from_numpy(
                 np.vstack(get_evenly_distributed_colors(target_full['labels'].shape[0])))
             for instance_counter, (label, mask) in enumerate(zip(target_full['labels'], target_full['masks'])):
-                if label == 255:
-                    continue
+                # if label == 255:
+                #     continue
 
                 mask_tmp = mask.detach().cpu().numpy()
                 mask_coords = full_res_coords[mask_tmp.astype(bool), :]
@@ -319,7 +321,6 @@ class InstanceSegmentation(pl.LightningModule):
 
     def eval_step(self, batch, batch_idx):
         data, target, file_names = batch
-        print("file_names", file_names)
         inverse_maps = data.inverse_maps
         target_full = data.target_full
         original_colors = data.original_colors
@@ -383,17 +384,17 @@ class InstanceSegmentation(pl.LightningModule):
             if self.config.trainer.deterministic:
                 torch.use_deterministic_algorithms(True)
 
-        # if self.config.general.save_visualizations:
-        #     backbone_features = output['backbone_features'].F.detach().cpu().numpy()
-        #     from sklearn import decomposition
-        #     pca = decomposition.PCA(n_components=3)
-        #     pca.fit(backbone_features)
-        #     pca_features = pca.transform(backbone_features)
-        #     rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
+        if self.config.general.save_visualizations:
+            backbone_features = output['backbone_features'].F.detach().cpu().numpy()
+            from sklearn import decomposition
+            pca = decomposition.PCA(n_components=3)
+            pca.fit(backbone_features)
+            pca_features = pca.transform(backbone_features)
+            rescaled_pca = 255 * (pca_features - pca_features.min()) / (pca_features.max() - pca_features.min())
 
         self.eval_instance_step(output, target, target_full, inverse_maps, file_names, original_coordinates,
                                 original_colors, original_normals, raw_coordinates, data_idx,
-                                backbone_features=None if self.config.general.save_visualizations else None)
+                                backbone_features=rescaled_pca if self.config.general.save_visualizations else None)
 
         if self.config.data.test_mode != "test":
             return {f"val_{k}": v.detach().cpu().item() for k, v in losses.items()}
@@ -413,10 +414,10 @@ class InstanceSegmentation(pl.LightningModule):
 
         return mask
 
-
     def get_mask_and_scores(self, mask_cls, mask_pred, num_queries=100, num_classes=18, device=None):
         if device is None:
             device = self.device
+
         labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
 
         if self.config.general.topk_per_image != -1 :
@@ -425,18 +426,28 @@ class InstanceSegmentation(pl.LightningModule):
             scores_per_query, topk_indices = mask_cls.flatten(0, 1).topk(num_queries, sorted=True)
 
         labels_per_query = labels[topk_indices]
-        topk_indices = topk_indices // num_classes
-        mask_pred = mask_pred[:, topk_indices]
-
         result_pred_mask = (mask_pred > 0).float()
         heatmap = mask_pred.float().sigmoid()
 
         mask_scores_per_image = (heatmap * result_pred_mask).sum(0) / (result_pred_mask.sum(0) + 1e-6)
-        score = scores_per_query * mask_scores_per_image
+
+        score = mask_scores_per_image
+
         classes = labels_per_query
 
         return score, result_pred_mask, classes, heatmap
 
+    def writeply(self,filename, xyz, rgb):
+        """write into a ply file"""
+        prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+        vertex_all = np.empty(len(xyz), dtype=prop)
+        for i_prop in range(0, 3):
+            vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
+        for i_prop in range(0, 3):
+            vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
+        ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+        ply.write(filename)
+        
     def eval_instance_step(self, output, target_low_res, target_full_res, inverse_maps, file_names,
                            full_res_coords, original_colors, original_normals, raw_coords, idx, first_full_res=False,
                            backbone_features=None,):
@@ -575,21 +586,35 @@ class InstanceSegmentation(pl.LightningModule):
                 all_pred_scores.append(sort_scores_values)
                 all_heatmaps.append(sorted_heatmap)
 
-            # start to save each proposal
-            raw_point = full_res_coords[0]
-            raw_color = original_colors[0]
-            raw_point_color = np.hstack((raw_point, raw_color))
-            pred_masks = all_pred_masks[0]
-            mask_proposals = []
-            for i in range(pred_masks.shape[1]):
-                indices = np.nonzero(pred_masks[:, i])[0]
-                mask_points = raw_point_color[indices]
-                mask_proposals.append(mask_points)           
-            for i, point_cloud in enumerate(mask_proposals):
-                xyz = point_cloud[:, :3]
-                rgb = point_cloud[:, 3:]
+            # # start to save each proposal
+            # raw_point = full_res_coords[0]
+            # raw_color = original_colors[0]
+            # raw_point_color = np.hstack((raw_point, raw_color))
+            # pred_masks = all_pred_masks[0]
+            # mask_proposals = []
+            # for i in range(pred_masks.shape[1]):
+            #     indices = np.nonzero(pred_masks[:, i])[0]
+            #     mask_points = raw_point_color[indices]
+            #     mask_proposals.append(mask_points)     
+
+            # np.save('{}_mask_proposals_list.npy'.format(file_names), np.array(mask_proposals, dtype=object), allow_pickle=True)
+            # np.save('{}_pointcloud_array.npy'.format(file_names), raw_point_color)
+            # np.save('{}_mask_proposal_binary.npy'.format(file_names), pred_masks)
+
+            # print("saved mask proposal!!!!")
+            # print("len of mask proposal", len(mask_proposals))
+
+            # folder = "pointcloud_mask_no_label"
+            # if not os.path.exists(folder):
+            #     os.makedirs(folder)
             
-            mask2images(mask_proposals, raw_point_color, [0,-30,30,-60,60], Resize = 1.5, background = False, save_image = True, name = file_names)
+            # for i, point_cloud in enumerate(mask_proposals):
+            #     xyz = point_cloud[:, :3]
+            #     rgb = point_cloud[:, 3:]
+            #     # save the PlyData object to a file with a unique name based on the point cloud's position in the list
+            #     filename = f"{folder}/point_cloud_{i}.ply"
+            #     self.writeply(filename, xyz, rgb)
+            #     print(f"Mask proposal {i+1} has shape: {mask_proposals[i].shape}")
 
         if self.validation_dataset.dataset_name == "scannet200":
             all_pred_classes[bid][all_pred_classes[bid] == 0] = -1
@@ -858,8 +883,6 @@ class InstanceSegmentation(pl.LightningModule):
                 dd[key].append(val)
 
         dd = {k: statistics.mean(v) for k, v in dd.items()}
-
-        dd['val_mean_loss_ce'] = statistics.mean([item for item in [v for k,v in dd.items() if "loss_ce" in k]])
         dd['val_mean_loss_mask'] = statistics.mean([item for item in [v for k,v in dd.items() if "loss_mask" in k]])
         dd['val_mean_loss_dice'] = statistics.mean([item for item in [v for k,v in dd.items() if "loss_dice" in k]])
 
@@ -879,6 +902,11 @@ class InstanceSegmentation(pl.LightningModule):
         scheduler_config = {"scheduler": lr_scheduler}
         scheduler_config.update(self.config.scheduler.pytorch_lightning_params)
         return [optimizer], [scheduler_config]
+
+    def lr_scheduler_step(self, scheduler, optimizer_idx, metric):
+        scheduler.step(
+            epoch=self.current_epoch
+        )  # note to change argument from metric to metrics when using pytorch official schedulers.
 
     def prepare_data(self):
         self.train_dataset = hydra.utils.instantiate(self.config.data.train_dataset)
