@@ -4,7 +4,7 @@
 """
 MaskFormer criterion.
 """
-
+import pickle
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -253,11 +253,14 @@ class SetCriterion(nn.Module):
              targets: list of dicts, such that len(targets) == batch_size.
                       The expected keys in each dict depends on the losses applied, see each loss' doc
         """
+
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "aux_outputs"}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets, mask_type)
-
+        
+        outputshape = outputs['pred_masks'][0].shape
+                
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_masks = sum(len(t["labels"]) for t in targets)
         num_masks = torch.as_tensor(

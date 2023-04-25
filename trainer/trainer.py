@@ -13,7 +13,7 @@ from collections import defaultdict
 from sklearn.cluster import DBSCAN
 from utils.votenet_utils.eval_det import eval_det
 from datasets.scannet200.scannet200_splits import HEAD_CATS_SCANNET_200, TAIL_CATS_SCANNET_200, COMMON_CATS_SCANNET_200, VALID_CLASS_IDS_200_VALIDATION
-
+from models.matcher_backup import *
 import hydra
 import MinkowskiEngine as ME
 import numpy as np
@@ -24,6 +24,7 @@ import random
 import colorsys
 from typing import List, Tuple
 import functools
+from plyfile import PlyData, PlyElement
 
 
 @functools.lru_cache(20)
@@ -69,6 +70,7 @@ class InstanceSegmentation(pl.LightningModule):
                        "loss_dice": matcher.cost_dice}
 
         aux_weight_dict = {}
+
         for i in range(self.model.num_levels * self.model.num_decoders):
             if i not in self.config.general.ignore_mask_idx:
                 aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
@@ -85,6 +87,7 @@ class InstanceSegmentation(pl.LightningModule):
         # metrics
         self.confusion = hydra.utils.instantiate(config.metrics)
         self.iou = IoU()
+    
         # misc
         self.labels_info = dict()
 
@@ -331,6 +334,14 @@ class InstanceSegmentation(pl.LightningModule):
         #    print("no targets")
         #    return None
 
+        print("here is the results")
+        print(len(original_colors))
+        print("inverse_maps", inverse_maps[0].shape, type(inverse_maps[0]))
+        print("length of target", len(target))
+        print("shape of target", target[0]["masks"].shape)
+
+        print(original_colors[0].shape, original_coordinates[0].shape)
+        
         if len(data.coordinates) == 0:
             return 0.
 
@@ -343,6 +354,9 @@ class InstanceSegmentation(pl.LightningModule):
             return 0.
 
         data = ME.SparseTensor(coordinates=data.coordinates, features=data.features, device=self.device)
+
+
+        
 
 
         try:
@@ -413,7 +427,6 @@ class InstanceSegmentation(pl.LightningModule):
 
         return mask
 
-
     def get_mask_and_scores(self, mask_cls, mask_pred, num_queries=100, num_classes=18, device=None):
         if device is None:
             device = self.device
@@ -437,6 +450,17 @@ class InstanceSegmentation(pl.LightningModule):
 
         return score, result_pred_mask, classes, heatmap
 
+    def writeply(self,filename, xyz, rgb):
+            """write into a ply file"""
+            prop = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')]
+            vertex_all = np.empty(len(xyz), dtype=prop)
+            for i_prop in range(0, 3):
+                vertex_all[prop[i_prop][0]] = xyz[:, i_prop]
+            for i_prop in range(0, 3):
+                vertex_all[prop[i_prop+3][0]] = rgb[:, i_prop]
+            ply = PlyData([PlyElement.describe(vertex_all, 'vertex')], text=True)
+            ply.write(filename)
+        
     def eval_instance_step(self, output, target_low_res, target_full_res, inverse_maps, file_names,
                            full_res_coords, original_colors, original_normals, raw_coords, idx, first_full_res=False,
                            backbone_features=None,):
@@ -447,6 +471,14 @@ class InstanceSegmentation(pl.LightningModule):
             'pred_masks': output['pred_masks']
         })
 
+        print("&&&&&&&&&&&&&&&&&&&&&")
+        print("length of prediction", len(prediction))
+        print("length of output['pred_masks']", output['pred_masks'][0].shape)
+        print ("self.decoder_id", self.decoder_id)
+        print("all keys in output", output.keys())
+        print("target_low_res", target_low_res[0]["masks"])
+        
+        
         prediction[self.decoder_id]['pred_logits'] = torch.functional.F.softmax(
             prediction[self.decoder_id]['pred_logits'],
             dim=-1)[..., :-1]
@@ -458,12 +490,15 @@ class InstanceSegmentation(pl.LightningModule):
         all_query_pos = list()
 
         offset_coords_idx = 0
+        print("lenth of bid", len(prediction[self.decoder_id]['pred_masks']))
+        
         for bid in range(len(prediction[self.decoder_id]['pred_masks'])):
             if not first_full_res:
                 if self.model.train_on_segments:
                     masks = prediction[self.decoder_id]['pred_masks'][bid].detach().cpu()[target_low_res[bid]['point2segment'].cpu()]
                 else:
                     masks = prediction[self.decoder_id]['pred_masks'][bid].detach().cpu()
+                print("newmask shape", masks.shape)
 
                 if self.config.general.use_dbscan:
                     new_preds = {
@@ -505,9 +540,23 @@ class InstanceSegmentation(pl.LightningModule):
                     prediction[self.decoder_id]['pred_logits'][bid].shape[0],
                     self.model.num_classes - 1)
 
+                print("newmask shape_2", masks.shape)
+                print("target_low_res", target_low_res[0]["masks"].T.shape)
+                old_target = target_low_res[0]["masks"].T
+
+                print("old_target.sum(dim=1)", old_target.sum(dim=0))
                 masks = self.get_full_res_mask(masks,
                                                inverse_maps[bid],
                                                target_full_res[bid]['point2segment'])
+                
+                new_target = self.get_full_res_mask(old_target,
+                                               inverse_maps[bid],
+                                               target_full_res[bid]['point2segment'])
+
+                print("new_target", new_target.shape)
+                
+                print("new_target.sum(dim=1)", new_target.sum(dim=0))
+                print("newmask shape_3", masks.shape)
 
                 heatmap = self.get_full_res_mask(heatmap,
                                                  inverse_maps[bid],
@@ -574,6 +623,73 @@ class InstanceSegmentation(pl.LightningModule):
                 all_pred_masks.append(sorted_masks)
                 all_pred_scores.append(sort_scores_values)
                 all_heatmaps.append(sorted_heatmap)
+
+
+        # start to save each proposal
+            raw_point = full_res_coords[0]
+            raw_color = original_colors[0]
+            raw_point_color = np.hstack((raw_point, raw_color))
+            pred_masks = all_pred_masks[0]
+            mask_proposals = []
+            print("before pred_masks", pred_masks.shape, new_target.shape)
+            
+            num_true = new_target.sum(dim=1)
+            
+            print(num_true)
+            for i in range(pred_masks.shape[1]):
+                indices = np.nonzero(pred_masks[:, i])[0]
+                mask_points = raw_point_color[indices]
+                mask_proposals.append(mask_points)     
+
+            targetbag = []
+            for i in range(new_target.shape[1]):
+                indices = np.nonzero(new_target[:, i]).reshape(-1)
+                print("target_point", indices.shape)
+                target_points = raw_point_color[indices]
+                targetbag.append(target_points)     
+            data_length = old_target.shape
+           
+            np.save('{}_{}_target.npy'.format(file_names,data_length), new_target)
+            np.save('{}_{}_predit.npy'.format(file_names,data_length), pred_masks)
+
+            matcher_instance = HungarianMatcher()
+            target_torch = new_target.T.cuda()
+            mask_torch = torch.torch.from_numpy(pred_masks.T).cuda()
+
+
+            np.save('{}_{}_mask_proposals_list.npy'.format(file_names,data_length), np.array(mask_proposals, dtype=object), allow_pickle=True)
+            np.save('{}_{}_target_proposals_list.npy'.format(file_names,data_length), np.array(targetbag, dtype=object), allow_pickle=True)
+            np.save('{}_{}_pointcloud_array.npy'.format(file_names,data_length), raw_point_color)
+
+            mask_proposals_folder = "matcher_check/{}/mask_proposal".format(file_names[0])
+            if not os.path.isdir(mask_proposals_folder):
+                os.makedirs(mask_proposals_folder)
+
+            for i, point_cloud in enumerate(mask_proposals):
+                xyz = point_cloud[:, :3]
+                rgb = point_cloud[:, 3:]
+                # save the PlyData object to a file with a unique name based on the point cloud's position in the list
+                filename = "{}/mask_proposal_{}.ply".format(mask_proposals_folder, i)
+                self.writeply(filename, xyz, rgb)
+            
+            print("all mask_saved for {}".format(file_names))
+            
+            target_proposals_folder = "matcher_check/{}/target_proposal".format(file_names[0])
+            if not os.path.isdir(target_proposals_folder):
+                os.makedirs(target_proposals_folder)
+
+            for i, point_cloud in enumerate(targetbag):
+                xyz = point_cloud[:, :3]
+                rgb = point_cloud[:, 3:]
+                # save the PlyData object to a file with a unique name based on the point cloud's position in the list
+                filename = "{}/target_{}.ply".format(target_proposals_folder, i)
+                self.writeply(filename, xyz, rgb)
+
+            print("all target saved for {}".format(file_names))
+
+            pair = matcher_instance(mask_torch, target_torch, "0")
+            with open('{}_{}_pair.pkl'.format(file_names,data_length), 'wb') as f:
+                pickle.dump(pair, f)
 
         if self.validation_dataset.dataset_name == "scannet200":
             all_pred_classes[bid][all_pred_classes[bid] == 0] = -1

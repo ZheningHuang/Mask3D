@@ -95,8 +95,9 @@ class HungarianMatcher(nn.Module):
     @torch.no_grad()
     def memory_efficient_forward(self, outputs, targets, mask_type):
         """More memory-friendly matching"""
-        bs, num_queries = outputs["pred_logits"].shape[:2]
 
+        bs = 1
+        num_queries = outputs.shape[0]
         indices = []
 
         # Iterate through batch size
@@ -116,48 +117,13 @@ class HungarianMatcher(nn.Module):
             # cost_class = -out_prob[:, tgt_ids]
             # cost_class[:, filter_ignore] = -1.  # for ignore classes pretend perfect match ;) TODO better worst class match?
 
-            out_mask = outputs['pred_masks'][b].T  # [num_queries, H_pred, W_pred]
+            out_mask = outputs # [num_queries, H_pred, W_pred]
             # gt masks are already padded when preparing target
-            tgt_mask = targets[b][mask_type].to(out_mask)
-
-            random_text = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
-
-            data_length = str(tgt_mask.shape[1])
-
-            # print("out_mask", out_mask.shape)
-            # print("tgt_mask", tgt_mask.shape)
-
-            # torch.save(out_mask, '{}_mask_out_mask.pt'.format(random_text + data_length))
-            # torch.save(tgt_mask, '{}_mask_tgt_mask.pt'.format(random_text + data_length))
+            tgt_mask = targets
 
 
-
-            if self.num_points != -1:
-                print("self.num_points != -1")
-                point_idx = torch.randperm(tgt_mask.shape[1],
-                                           device=tgt_mask.device)[:int(self.num_points*tgt_mask.shape[1])]
-                # print("point_idx what is this", point_idx.shape)
-                #point_idx = torch.randint(0, tgt_mask.shape[1], size=(self.num_points,), device=tgt_mask.device)
-            else:
-                # sample all points
-                point_idx = torch.arange(tgt_mask.shape[1], device=tgt_mask.device)
-                # print("point_idx what is this", point_idx.shape)
-            # out_mask = out_mask[:, None]
-            # tgt_mask = tgt_mask[:, None]
-            # all masks share the same set of points for efficient matching!
-            # point_coords = torch.rand(1, self.num_points, 2, device=out_mask.device)
-            # get gt labels
-            # tgt_mask = point_sample(
-            #     tgt_mask,
-            #     point_coords.repeat(tgt_mask.shape[0], 1, 1),
-            #     align_corners=False,
-            # ).squeeze(1)
-
-            # out_mask = point_sample(
-            #     out_mask,
-            #     point_coords.repeat(out_mask.shape[0], 1, 1),
-            #     align_corners=False,
-            # ).squeeze(1)
+            
+            point_idx = torch.arange(tgt_mask.shape[1], device=tgt_mask.device)
 
             print("tell me ge------------", out_mask.shape, tgt_mask.shape)
             with autocast(enabled=False):
@@ -186,7 +152,6 @@ class HungarianMatcher(nn.Module):
             # print("after_linear_sum_assignment", after_linear_sum_assignment)
             indices.append(after_linear_sum_assignment)
 
-            
         return [
             (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))
             for i, j in indices
